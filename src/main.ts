@@ -1,4 +1,6 @@
 import { bodeSvg, circuitSvg, niceY, scopeSvg } from "./draw.ts";
+import { initExamplesPage, refreshExamplesPage } from "./pulsePage.ts";
+import { initSquarePage, refreshSquarePage } from "./squarePage.ts";
 import { formatFarads, formatGain, formatHz, formatOhms, formatPhase, formatSeconds, formatVolts, inputString } from "./format.ts";
 import { lessonHtml, responses } from "./lesson.ts";
 import {
@@ -427,12 +429,52 @@ for (const id of ["pre-low", "pre-mid", "pre-high"]) {
 
 window.addEventListener("keydown", (event) => {
   if (event.code !== "Space") return;
+  if (document.getElementById("view-compare")?.hidden) return;
   const tag = (event.target as HTMLElement | null)?.tagName;
   if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
   event.preventDefault();
   setPlaying(!state.playing);
 });
 
+type SimulatorPage = "compare" | "square" | "examples";
+
+function pageFromHash(): SimulatorPage {
+  if (location.hash === "#square") return "square";
+  if (location.hash === "#examples") return "examples";
+  return "compare";
+}
+
+function showPage(page: SimulatorPage) {
+  const compare = document.getElementById("view-compare");
+  const squareView = document.getElementById("view-square");
+  const examplesView = document.getElementById("view-examples");
+  if (!compare || !squareView || !examplesView) return;
+  compare.hidden = page !== "compare";
+  squareView.hidden = page !== "square";
+  examplesView.hidden = page !== "examples";
+  document.getElementById("nav-compare")?.setAttribute("aria-pressed", page === "compare" ? "true" : "false");
+  document.getElementById("nav-square")?.setAttribute("aria-pressed", page === "square" ? "true" : "false");
+  document.getElementById("nav-examples")?.setAttribute("aria-pressed", page === "examples" ? "true" : "false");
+  document.title =
+    page === "square" ? "High-pass RC: Square wave" : page === "examples" ? "RC worked examples" : "Low-pass and high-pass RC filters";
+  if (page === "square") refreshSquarePage();
+  if (page === "examples") refreshExamplesPage();
+}
+
+function openPage(page: SimulatorPage) {
+  const hash = page === "compare" ? "#compare" : page === "square" ? "#square" : "#examples";
+  if (location.hash !== hash) location.hash = hash;
+  else showPage(page);
+}
+
+document.getElementById("nav-compare")?.addEventListener("click", () => openPage("compare"));
+document.getElementById("nav-square")?.addEventListener("click", () => openPage("square"));
+document.getElementById("nav-examples")?.addEventListener("click", () => openPage("examples"));
+window.addEventListener("hashchange", () => showPage(pageFromHash()));
+
 parkStepCursor();
 syncControls();
 paint();
+initSquarePage();
+initExamplesPage();
+showPage(pageFromHash());

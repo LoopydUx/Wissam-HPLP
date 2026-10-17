@@ -7,7 +7,13 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div class="page">
+    <nav class="topnav" aria-label="Simulator pages">
+      <button type="button" id="nav-compare" aria-pressed="true">Compare low-pass and high-pass</button>
+      <button type="button" id="nav-square" aria-pressed="false">High-pass RC: Square wave</button>
+      <button type="button" id="nav-examples" aria-pressed="false">RC Worked Examples</button>
+    </nav>
+
+    <div id="view-compare" class="page">
       <header class="hero">
         <p class="eyebrow">High-school electronics</p>
         <h1>Low-pass and high-pass RC filters</h1>
@@ -162,6 +168,348 @@
           With the same capacitor voltage at the start, low-pass output + high-pass output = input.
         </p>
       </section>
+    </div>
+
+    <div id="view-square" class="page" hidden>
+      <header class="hero">
+        <p class="eyebrow">High-school electronics</p>
+        <h1>High-pass RC: Square wave</h1>
+        <p class="lede">
+          A 50% square wave passes through a series capacitor. The output is the voltage across the resistor to ground.
+          Every edge makes the output jump, and then the output decays exponentially toward zero.
+        </p>
+      </header>
+
+      <section class="metrics eight" aria-label="Square-wave levels">
+        <div class="metric">
+          <span>Time constant τ = RC</span>
+          <strong id="sq-tau">—</strong>
+        </div>
+        <div class="metric">
+          <span>Cutoff fc = 1 / (2πRC)</span>
+          <strong id="sq-fc">—</strong>
+        </div>
+        <div class="metric">
+          <span>Period T = 1/f</span>
+          <strong id="sq-T">—</strong>
+        </div>
+        <div class="metric">
+          <span>Plateau length T/2</span>
+          <strong id="sq-h">—</strong>
+        </div>
+        <div class="metric">
+          <span>Upper level VH = D + A</span>
+          <strong id="sq-vh">—</strong>
+        </div>
+        <div class="metric">
+          <span>Lower level VL = D − A</span>
+          <strong id="sq-vl">—</strong>
+        </div>
+        <div class="metric">
+          <span>Input change at each edge</span>
+          <strong id="sq-jump">—</strong>
+        </div>
+        <div class="metric">
+          <span>Plateau length in time constants</span>
+          <strong id="sq-ratio">—</strong>
+        </div>
+      </section>
+
+      <section class="panel" aria-label="High-pass square-wave controls">
+        <div class="control">
+          <label for="sq-r-number">Resistance R</label>
+          <input id="sq-r-slider" type="range" min="0" max="1000" step="0.001" />
+          <div class="numline">
+            <input id="sq-r-number" type="number" inputmode="decimal" min="0.01" step="any" />
+            <select id="sq-r-unit" aria-label="Resistance unit">
+              <option value="ohm">Ω</option>
+              <option value="kohm" selected>kΩ</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="control">
+          <label for="sq-c-number">Capacitance C</label>
+          <input id="sq-c-slider" type="range" min="0" max="1000" step="0.001" />
+          <div class="numline">
+            <input id="sq-c-number" type="number" inputmode="decimal" min="0" step="any" />
+            <select id="sq-c-unit" aria-label="Capacitance unit">
+              <option value="nF" selected>nF</option>
+              <option value="uF">µF</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="control">
+          <label for="sq-f-number">Input frequency</label>
+          <input id="sq-f-slider" type="range" min="0" max="1000" step="0.001" />
+          <div class="numline">
+            <input id="sq-f-number" type="number" inputmode="decimal" min="0" step="any" />
+            <select id="sq-f-unit" aria-label="Frequency unit">
+              <option value="Hz" selected>Hz</option>
+              <option value="kHz">kHz</option>
+            </select>
+          </div>
+          <p class="hint">Square wave, 50% duty cycle. Logarithmic slider.</p>
+        </div>
+
+        <div class="control">
+          <label for="sq-a-number">Input amplitude <span class="unit-hint">peak voltage A</span></label>
+          <input id="sq-a-slider" type="range" min="0" max="20" step="0.1" />
+          <div class="numline">
+            <input id="sq-a-number" type="number" inputmode="decimal" min="0" max="20" step="0.1" />
+            <span class="suffix">V peak</span>
+          </div>
+        </div>
+
+        <div class="control">
+          <label for="sq-o-number">DC offset D</label>
+          <input id="sq-o-slider" type="range" min="-20" max="20" step="0.1" />
+          <div class="numline">
+            <input id="sq-o-number" type="number" inputmode="decimal" min="-20" max="20" step="0.1" />
+            <span class="suffix">V</span>
+          </div>
+        </div>
+
+        <div class="control">
+          <span id="sq-wave-label">Waveform</span>
+          <p class="locked-wave">Square · 50% duty</p>
+        </div>
+
+        <div class="control span-all">
+          <span id="sq-mode-label">Initial condition</span>
+          <div class="segment wrap" role="radiogroup" aria-labelledby="sq-mode-label">
+            <label><input type="radio" name="sq-mode" value="periodic" checked /> Periodic steady state</label>
+            <label><input type="radio" name="sq-mode" value="startup" /> Uncharged capacitor</label>
+          </div>
+        </div>
+
+        <div class="transport">
+          <button type="button" id="sq-play" aria-pressed="false">Play</button>
+          <button type="button" id="sq-reset">Reset time</button>
+          <div class="presets" role="group" aria-label="Presets">
+            <button type="button" id="sq-worked">Worked example</button>
+            <button type="button" id="sq-pre-low" data-factor="0.1">Below cutoff · 0.1 fc</button>
+            <button type="button" id="sq-pre-mid" data-factor="1">At cutoff · fc</button>
+            <button type="button" id="sq-pre-high" data-factor="10">Above cutoff · 10 fc</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="sq-layout">
+        <div class="sq-main">
+          <article class="card hp">
+            <header class="card-head">
+              <h2>High-pass circuit</h2>
+              <p>Input → series capacitor → output. Resistor from the output node to ground.</p>
+            </header>
+            <div id="sq-circuit"></div>
+            <p class="measure">Output voltage is measured across the resistor. VC is positive on the input side of the capacitor. Positive current I flows down through the resistor when Vout is positive.</p>
+          </article>
+
+          <article class="card hp graph-card">
+            <header class="card-head">
+              <h2>Input and output</h2>
+              <p>Blue is the input. Orange is the output. Both use the voltage axis. Edges are drawn as instant jumps, and the pieces between them are exponentials.</p>
+            </header>
+            <div class="zoom-row">
+              <div class="control">
+                <label for="sq-time-zoom">Time zoom <span class="unit-hint" id="sq-time-label"></span></label>
+                <input id="sq-time-zoom" type="range" min="0" max="1000" step="1" />
+              </div>
+              <div class="control">
+                <label for="sq-volt-zoom">Voltage zoom <span class="unit-hint" id="sq-volt-label"></span></label>
+                <input id="sq-volt-zoom" type="range" min="0" max="1000" step="1" />
+              </div>
+              <div class="control">
+                <label for="sq-start">Time position <span class="unit-hint" id="sq-start-label"></span></label>
+                <input id="sq-start" type="range" min="0" max="40" step="0.01" />
+              </div>
+            </div>
+            <div class="legend">
+              <span><span class="swatch in"></span> Input</span>
+              <span><span class="swatch out"></span> Output</span>
+              <label><input id="sq-show-vc" type="checkbox" /> <span class="swatch vc"></span> Capacitor voltage</label>
+              <label><input id="sq-show-i" type="checkbox" /> <span class="swatch i"></span> Resistor current</label>
+            </div>
+            <div id="sq-scope" class="scope-host"></div>
+            <p class="measure">Drag the graph to move the cursor. Pause first if it is playing. VC = Vin − Vout and I = Vout / R.</p>
+            <p class="measure" id="sq-scale-note"></p>
+            <p class="cursor-read" id="sq-readout"></p>
+            <p class="measure" id="sq-stats-note"></p>
+            <dl class="stats four">
+              <div><dt>Just after rising</dt><dd id="sq-g-rise">—</dd></div>
+              <div><dt>Just before falling</dt><dd id="sq-g-before-fall">—</dd></div>
+              <div><dt>Just after falling</dt><dd id="sq-g-fall">—</dd></div>
+              <div><dt>Just before rising</dt><dd id="sq-g-before-rise">—</dd></div>
+            </dl>
+            <p class="identity" id="sq-identity"></p>
+          </article>
+
+          <article class="card" id="sq-follow">
+            <h2>Follow one cycle</h2>
+            <p class="measure">Choose a part of the cycle. The graph highlights it and substitutes the current numbers into that step.</p>
+            <div class="segment wrap stage-segment" role="radiogroup" aria-label="Cycle stage">
+              <label><input type="radio" name="sq-stage" value="rise" checked /> Rising edge</label>
+              <label><input type="radio" name="sq-stage" value="high" /> High plateau</label>
+              <label><input type="radio" name="sq-stage" value="fall" /> Falling edge</label>
+              <label><input type="radio" name="sq-stage" value="low" /> Low plateau</label>
+            </div>
+            <div id="sq-stage-copy" aria-live="polite"></div>
+          </article>
+        </div>
+
+        <article class="card lesson" aria-live="polite">
+          <h2>Why the output looks like this</h2>
+          <div id="sq-lesson"></div>
+        </article>
+      </div>
+    </div>
+    <div id="view-examples" class="page" hidden>
+      <header class="hero">
+        <p class="eyebrow">High-school electronics</p>
+        <h1>RC worked examples</h1>
+        <p class="lede">
+          Each example is one rectangular pulse with two switching times. Work the low-pass question first:
+          the output is the capacitor voltage. The high-pass variation uses the same input and the same initial capacitor voltage,
+          and the output is the resistor voltage.
+        </p>
+      </header>
+
+      <div class="ex-nav">
+        <button type="button" id="ex-prev">Previous example</button>
+        <p id="ex-position">Example 1 of 4</p>
+        <button type="button" id="ex-next">Next example</button>
+        <div class="ex-jumps" role="group" aria-label="Choose an example">
+          <button type="button" data-example="0">1</button>
+          <button type="button" data-example="1">2</button>
+          <button type="button" data-example="2">3</button>
+          <button type="button" data-example="3">4</button>
+        </div>
+      </div>
+
+      <div class="segment" role="radiogroup" aria-label="Filter for this example">
+        <label><input type="radio" name="ex-filter" value="lp" checked /> Low-pass</label>
+        <label><input type="radio" name="ex-filter" value="hp" /> High-pass</label>
+      </div>
+      <p class="measure" id="ex-filter-note"></p>
+
+      <section class="metrics" aria-label="Example summary">
+        <div class="metric"><span>Time constant τ</span><strong id="ex-m-tau">—</strong></div>
+        <div class="metric"><span>First switch ta</span><strong id="ex-m-ta">—</strong></div>
+        <div class="metric"><span>Second switch tb</span><strong id="ex-m-tb">—</strong></div>
+        <div class="metric"><span>Initial capacitor voltage</span><strong id="ex-m-vc">—</strong></div>
+      </section>
+
+      <div class="ex-layout">
+        <article class="card lp" id="ex-circuit-card">
+          <h2 id="ex-title">Example 1</h2>
+          <div id="ex-circuit"></div>
+          <p class="measure" id="ex-measure"></p>
+        </article>
+        <article class="card">
+          <h2>Question</h2>
+          <p id="ex-stem"></p>
+          <p class="callout calm" id="ex-initial"></p>
+          <div class="graph-frame">
+            <div id="ex-input-graph" class="scope-host"></div>
+            <div id="ex-input-tip" class="graph-tip" hidden></div>
+          </div>
+          <p class="measure" id="ex-input-note"></p>
+          <p class="cursor-read" id="ex-input-read" hidden></p>
+          <ol type="a" id="ex-questions" class="ex-questions"></ol>
+        </article>
+      </div>
+
+      <article class="card lp" id="ex-output-card">
+        <h2>Output voltage</h2>
+        <div class="transport">
+          <button type="button" id="ex-next-step">Reveal next solution step</button>
+          <button type="button" id="ex-full">Show full solution</button>
+          <button type="button" id="ex-hide">Hide solution</button>
+        </div>
+        <p class="measure" id="ex-step-label" aria-live="polite"></p>
+        <div class="graph-frame">
+          <div id="ex-output-graph" class="scope-host"></div>
+          <div id="ex-output-tip" class="graph-tip" hidden></div>
+        </div>
+        <p class="measure" id="ex-output-note"></p>
+        <p class="cursor-read" id="ex-output-read" hidden></p>
+        <div class="legend" aria-hidden="true"><span class="swatch in"></span> Input <span class="swatch out"></span> Output</div>
+        <div id="ex-solution"></div>
+      </article>
+
+      <article class="card">
+        <h2>Edit this example</h2>
+        <p class="measure">Changing a value recalculates the question, the equations, the graph, and the answers. The pulse always returns to the initial level. Restore brings back the original numbers for this example.</p>
+        <p class="edit-error" id="ex-edit-error" role="alert"></p>
+        <p class="hint" id="ex-modified" hidden>These values differ from the original example.</p>
+        <div class="panel">
+          <div class="control">
+            <label for="ex-r">Resistance R</label>
+            <div class="numline">
+              <input id="ex-r" type="number" inputmode="decimal" min="0" step="any" />
+              <select id="ex-r-unit" aria-label="Resistance unit">
+                <option value="ohm">Ω</option>
+                <option value="kohm">kΩ</option>
+              </select>
+            </div>
+          </div>
+          <div class="control">
+            <label for="ex-c">Capacitance C</label>
+            <div class="numline">
+              <input id="ex-c" type="number" inputmode="decimal" min="0" step="any" />
+              <select id="ex-c-unit" aria-label="Capacitance unit">
+                <option value="nF">nF</option>
+                <option value="uF">µF</option>
+              </select>
+            </div>
+          </div>
+          <div class="control">
+            <label for="ex-u0">Initial level</label>
+            <div class="numline">
+              <input id="ex-u0" type="number" inputmode="decimal" step="any" />
+              <span class="suffix">V</span>
+            </div>
+          </div>
+          <div class="control">
+            <label for="ex-up">Pulse level</label>
+            <div class="numline">
+              <input id="ex-up" type="number" inputmode="decimal" step="any" />
+              <span class="suffix">V</span>
+            </div>
+          </div>
+          <div class="control">
+            <label for="ex-ta">First switch ta</label>
+            <div class="numline">
+              <input id="ex-ta" type="number" inputmode="decimal" min="0" step="any" />
+              <span class="suffix">ms</span>
+            </div>
+          </div>
+          <div class="control">
+            <label for="ex-tb">Second switch tb</label>
+            <div class="numline">
+              <input id="ex-tb" type="number" inputmode="decimal" min="0" step="any" />
+              <span class="suffix">ms</span>
+            </div>
+          </div>
+          <div class="control">
+            <label for="ex-vc">Initial VC(0)</label>
+            <div class="numline">
+              <input id="ex-vc" type="number" inputmode="decimal" step="any" />
+              <span class="suffix">V</span>
+            </div>
+          </div>
+          <div class="control span-all">
+            <label for="ex-times">Times to calculate</label>
+            <input id="ex-times" type="text" inputmode="decimal" aria-describedby="ex-times-hint" />
+            <p class="hint" id="ex-times-hint">Milliseconds, separated by commas. Example: 3, 4</p>
+          </div>
+        </div>
+        <div class="transport">
+          <button type="button" id="ex-restore">Restore original example</button>
+        </div>
+      </article>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -87,3 +87,68 @@ export function inputString(value: number, unitScale: number): string {
   const decimals = abs >= 100 ? 2 : abs >= 10 ? 3 : 4;
   return shown.toFixed(decimals).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 }
+
+const SUPER: Record<string, string> = {
+  "-": "⁻",
+  "0": "⁰",
+  "1": "¹",
+  "2": "²",
+  "3": "³",
+  "4": "⁴",
+  "5": "⁵",
+  "6": "⁶",
+  "7": "⁷",
+  "8": "⁸",
+  "9": "⁹",
+};
+
+function superscript(power: number): string {
+  return String(power)
+    .split("")
+    .map((ch) => SUPER[ch] ?? ch)
+    .join("");
+}
+
+/** Dimensionless factors such as k = exp(−h/τ). */
+export function formatFactor(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  const sign = value < 0 ? "−" : "";
+  const a = Math.abs(value);
+  if (a === 0) return "0";
+  if (a < 1e-3) {
+    const [mant, exp] = a.toExponential(3).split("e");
+    return `${sign}${mant}×10${superscript(Number(exp))}`;
+  }
+  if (a >= 100) return sign + trimFixed(a, 1);
+  if (a >= 10) return sign + trimFixed(a, 2);
+  if (a >= 1) return sign + trimFixed(a, 3);
+  if (a >= 0.1) return sign + trimFixed(a, 4);
+  return sign + trimFixed(a, 6);
+}
+
+/** Volts with enough digits to show the square-wave corners. */
+export function formatLessonVolts(value: number, signed = false): string {
+  if (!Number.isFinite(value)) return "—";
+  const a = Math.abs(value);
+  if (a < 1e-6) return "0 V";
+  let body: string;
+  if (a >= 0.1) body = trimFixed(a, 3);
+  else if (a >= 0.001) body = trimFixed(a, 5);
+  else {
+    const [mant, exp] = a.toExponential(2).split("e");
+    body = `${mant}×10${superscript(Number(exp))}`;
+  }
+  const sign = value < 0 ? "−" : signed && value > 0 ? "+" : "";
+  return `${sign}${body} V`;
+}
+
+export function formatAmps(amps: number): string {
+  if (!Number.isFinite(amps)) return "—";
+  const sign = amps < 0 ? "−" : "";
+  const a = Math.abs(amps);
+  if (a < 1e-15) return "0 A";
+  if (a >= 1) return `${sign}${trimFixed(a, 3)} A`;
+  if (a >= 1e-4) return `${sign}${trimFixed(a * 1e3, 3)} mA`;
+  if (a >= 1e-6) return `${sign}${trimFixed(a * 1e6, 3)} µA`;
+  return `${sign}${trimFixed(a * 1e9, 2)} nA`;
+}

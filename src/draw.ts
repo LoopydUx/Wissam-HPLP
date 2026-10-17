@@ -1,4 +1,5 @@
 import { frequencyResponse, type Sample, type Waveform } from "./sim.ts";
+import type { SquarePoint } from "./square.ts";
 import { formatTick } from "./format.ts";
 
 function hResistor(x1: number, x2: number, y: number): string {
@@ -350,4 +351,269 @@ export function niceY(min: number, max: number): { min: number; max: number; ste
   if (Math.abs(b) < step * 1e-6) b = 0;
   if (a === b) b = a + step;
   return { min: a, max: b, step };
+}
+
+/** Magnify a fitted axis around its center. Zoom 1 leaves the fit alone. */
+export function zoomAround(min: number, max: number, zoom: number): { min: number; max: number; step: number } {
+  const fit = niceY(min, max);
+  if (!(zoom > 1.02)) return fit;
+  const mid = (fit.min + fit.max) / 2;
+  const half = (fit.max - fit.min) / (2 * zoom);
+  const step = niceStep(Math.max(half * 2, 1e-12), 5);
+  let a = Math.floor((mid - half) / step + 1e-9) * step;
+  let b = Math.ceil((mid + half) / step - 1e-9) * step;
+  if (!(b > a)) b = a + step;
+  return { min: a, max: b, step };
+}
+
+export function hpSquareCircuitSvg(rLabel: string, cLabel: string): string {
+  const yTop = 68;
+  const yGnd = 200;
+  const xSrc = 108;
+  const xNode = 498;
+  const srcR = 28;
+  const srcCy = 134;
+  const plateL = 246;
+  const plateR = 270;
+
+  return `
+    <svg class="schematic" viewBox="0 0 680 248" role="img" aria-label="High-pass RC circuit. The input feeds a series capacitor. The resistor runs from the output node to ground. Output voltage is measured across the resistor.">
+      <defs>
+        <marker id="hp-i-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M 0 0 L 8 4 L 0 8 Z" class="current-head"/>
+        </marker>
+      </defs>
+      <line x1="${xSrc}" y1="${yGnd}" x2="${xNode}" y2="${yGnd}" class="wire"/>
+      <circle cx="${xSrc}" cy="${yGnd}" r="3.2" class="joint"/>
+      <circle cx="${xNode}" cy="${yGnd}" r="3.2" class="joint"/>
+      <g class="ground" transform="translate(${(xSrc + xNode) / 2} ${yGnd})">
+        <line x1="-16" y1="0" x2="16" y2="0"/>
+        <line x1="-10" y1="7" x2="10" y2="7"/>
+        <line x1="-4" y1="14" x2="4" y2="14"/>
+      </g>
+      <text class="gnd-label" x="${(xSrc + xNode) / 2}" y="${yGnd + 32}" text-anchor="middle">ground</text>
+
+      <line x1="${xSrc}" y1="${srcCy + srcR}" x2="${xSrc}" y2="${yGnd}" class="wire"/>
+      <circle cx="${xSrc}" cy="${srcCy}" r="${srcR}" class="source"/>
+      <text class="polarity" x="${xSrc + 8}" y="${srcCy - 6}">+</text>
+      <text class="polarity" x="${xSrc + 10}" y="${srcCy + 16}">−</text>
+      <line x1="${xSrc}" y1="${srcCy - srcR}" x2="${xSrc}" y2="${yTop}" class="wire"/>
+      <text class="term" x="18" y="${srcCy - 4}">Vin</text>
+      ${waveIcon("square", 22, srcCy + 22)}
+
+      <line x1="${xSrc}" y1="${yTop}" x2="${plateL}" y2="${yTop}" class="wire"/>
+      <line x1="${plateL}" y1="${yTop - 22}" x2="${plateL}" y2="${yTop + 22}" class="part"/>
+      <line x1="${plateR}" y1="${yTop - 22}" x2="${plateR}" y2="${yTop + 22}" class="part"/>
+      <line x1="${plateR}" y1="${yTop}" x2="${xNode}" y2="${yTop}" class="wire"/>
+      <text class="polarity" x="${plateL - 22}" y="${yTop + 6}">+</text>
+      <text class="polarity" x="${plateR + 8}" y="${yTop + 6}">−</text>
+      <text class="part-label" x="${(plateL + plateR) / 2}" y="${yTop - 30}" text-anchor="middle">VC</text>
+      <text class="part-label" x="${(plateL + plateR) / 2}" y="${yTop + 48}" text-anchor="middle">C = ${cLabel}</text>
+
+      <circle cx="${xNode}" cy="${yTop}" r="4.5" class="joint out"/>
+      <path d="${vResistor(xNode, yTop, yGnd)}" class="part"/>
+      <text class="polarity" x="${xNode + 18}" y="${yTop + 22}">+</text>
+      <text class="polarity" x="${xNode + 18}" y="${yGnd - 8}">−</text>
+      <text class="part-label" x="${xNode + 36}" y="140">R = ${rLabel}</text>
+
+      <line x1="${xNode - 46}" y1="96" x2="${xNode - 46}" y2="168" class="current-arrow" marker-end="url(#hp-i-arrow)"/>
+      <text class="part-label" x="${xNode - 58}" y="128" text-anchor="end">I</text>
+
+      <line x1="${xNode}" y1="${yTop}" x2="${xNode + 46}" y2="${yTop}" class="wire out-lead"/>
+      <text class="term out-label" x="${xNode + 52}" y="${yTop + 5}">Vout</text>
+    </svg>
+  `;
+}
+
+export interface HpScopeMarker {
+  t: number;
+  label: string;
+}
+
+export interface HpScopeModel {
+  samples: SquarePoint[];
+  tStart: number;
+  tEnd: number;
+  yMin: number;
+  yMax: number;
+  yStep: number;
+  showVc: boolean;
+  showI: boolean;
+  iMin: number;
+  iMax: number;
+  iStep: number;
+  cursor: SquarePoint | null;
+  cursorBefore: SquarePoint | null;
+  bands: { t0: number; t1: number }[];
+  edges: HpScopeMarker[];
+  tauMarks: HpScopeMarker[];
+}
+
+function polyline(samples: SquarePoint[], xOf: (t: number) => number, yOf: (v: number) => number, key: "vin" | "vout" | "vc" | "current"): string {
+  return samples
+    .map((sample) => {
+      const x = xOf(sample.t);
+      const y = yOf(sample[key]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return "";
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .filter(Boolean)
+    .join(" ");
+}
+
+function currentDisplay(iMin: number, iMax: number): { scale: number; unit: string } {
+  const peak = Math.max(Math.abs(iMin), Math.abs(iMax));
+  if (peak >= 1) return { scale: 1, unit: "A" };
+  if (peak >= 1e-3) return { scale: 1e3, unit: "mA" };
+  if (peak >= 1e-6) return { scale: 1e6, unit: "µA" };
+  return { scale: 1e9, unit: "nA" };
+}
+
+export function hpSquareScopeSvg(model: HpScopeModel): string {
+  const W = 760;
+  const H = 400;
+  const padL = 58;
+  const padR = model.showI ? 68 : 18;
+  const padT = 22;
+  const padB = 46;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const tSpan = model.tEnd - model.tStart || 1;
+  const ySpan = model.yMax - model.yMin || 1;
+  const xOf = (t: number) => padL + ((t - model.tStart) / tSpan) * plotW;
+  const yOf = (v: number) => padT + ((model.yMax - v) / ySpan) * plotH;
+
+  let timeScale = 1;
+  let timeUnit = "s";
+  if (tSpan < 2e-3) {
+    timeScale = 1e6;
+    timeUnit = "µs";
+  } else if (tSpan < 2) {
+    timeScale = 1e3;
+    timeUnit = "ms";
+  }
+
+  const grid: string[] = [];
+  const labels: string[] = [];
+  const t0 = model.tStart * timeScale;
+  const t1 = model.tEnd * timeScale;
+  const timeStep = niceStep(Math.abs(t1 - t0), 5);
+  const firstTick = Math.ceil((t0 - 1e-9) / timeStep) * timeStep;
+  for (let shown = firstTick; shown <= t1 + timeStep * 1e-6; shown += timeStep) {
+    const t = shown / timeScale;
+    if (t < model.tStart - 1e-9 || t > model.tEnd + 1e-9) continue;
+    const x = xOf(t);
+    grid.push(`<line x1="${x.toFixed(2)}" y1="${padT}" x2="${x.toFixed(2)}" y2="${padT + plotH}" class="grid"/>`);
+    labels.push(`<text class="tick" x="${x.toFixed(2)}" y="${H - 18}" text-anchor="middle">${formatTick(shown, timeStep)}</text>`);
+  }
+
+  const yFirst = Math.ceil((model.yMin - 1e-9) / model.yStep) * model.yStep;
+  let voltageZero = Number.NaN;
+  if (model.yStep > 0) for (let v = yFirst; v <= model.yMax + model.yStep * 1e-6; v += model.yStep) {
+    if (v < model.yMin - 1e-9 || v > model.yMax + 1e-9) continue;
+    const y = yOf(v);
+    const zero = Math.abs(v) < model.yStep * 1e-3;
+    if (zero) voltageZero = y;
+    grid.push(`<line x1="${padL}" y1="${y.toFixed(2)}" x2="${padL + plotW}" y2="${y.toFixed(2)}" class="${zero ? "zero" : "grid"}"/>`);
+    labels.push(`<text class="tick" x="${padL - 8}" y="${y.toFixed(2)}" text-anchor="end" dy="4">${formatTick(v, model.yStep)}</text>`);
+  }
+
+  const iUnit = currentDisplay(model.iMin, model.iMax);
+  if (model.showI) {
+    const iSpan = model.iMax - model.iMin || 1;
+    const yOfI = (amps: number) => padT + ((model.iMax - amps) / iSpan) * plotH;
+    const iFirst = Math.ceil((model.iMin * iUnit.scale - 1e-9) / (model.iStep * iUnit.scale)) * (model.iStep * iUnit.scale);
+    const iLast = model.iMax * iUnit.scale;
+    const iStepShown = model.iStep * iUnit.scale;
+    if (iStepShown > 0) for (let shown = iFirst; shown <= iLast + iStepShown * 1e-6; shown += iStepShown) {
+      const amps = shown / iUnit.scale;
+      if (amps < model.iMin - Math.abs(model.iStep) * 1e-6 || amps > model.iMax + Math.abs(model.iStep) * 1e-6) continue;
+      const y = yOfI(amps);
+      const zero = Math.abs(amps) < Math.abs(model.iStep) * 1e-3;
+      if (zero && Math.abs(y - voltageZero) > 3) {
+        grid.push(`<line x1="${padL}" y1="${y.toFixed(2)}" x2="${padL + plotW}" y2="${y.toFixed(2)}" class="i-zero"/>`);
+      }
+      labels.push(`<text class="tick i-tick" x="${padL + plotW + 8}" y="${y.toFixed(2)}" dy="4">${formatTick(shown, iStepShown)}</text>`);
+    }
+    labels.push(`<text class="axis-name i-tick" x="${W - 16}" y="${padT + plotH / 2}" text-anchor="middle" transform="rotate(90 ${W - 16} ${padT + plotH / 2})">current (${iUnit.unit})</text>`);
+  }
+
+  const yOfCurrent = (amps: number) => {
+    const iSpan = model.iMax - model.iMin || 1;
+    return padT + ((model.iMax - amps) / iSpan) * plotH;
+  };
+
+  const marks: string[] = [];
+  for (const band of model.bands) {
+    const x0 = xOf(Math.max(band.t0, model.tStart));
+    const x1 = xOf(Math.min(band.t1, model.tEnd));
+    if (x1 <= padL || x0 >= padL + plotW) continue;
+    marks.push(`<rect x="${Math.max(x0, padL).toFixed(2)}" y="${padT}" width="${Math.max(0, Math.min(x1, padL + plotW) - Math.max(x0, padL)).toFixed(2)}" height="${plotH}" class="band"/>`);
+  }
+  for (const edge of model.edges) {
+    if (edge.t < model.tStart || edge.t > model.tEnd) continue;
+    const x = xOf(edge.t);
+    marks.push(`<rect x="${(x - 5).toFixed(2)}" y="${padT}" width="10" height="${plotH}" class="edge-band"/>`);
+    marks.push(`<line x1="${x.toFixed(2)}" y1="${padT}" x2="${x.toFixed(2)}" y2="${padT + plotH}" class="edge-line"/>`);
+    const anchor = x > padL + plotW * 0.72 ? "end" : "start";
+    const lx = anchor === "end" ? x - 6 : x + 6;
+    marks.push(`<text class="edge-label" x="${lx.toFixed(2)}" y="${padT + 16}" text-anchor="${anchor}">${edge.label}</text>`);
+  }
+  for (const mark of model.tauMarks) {
+    if (mark.t < model.tStart || mark.t > model.tEnd) continue;
+    const x = xOf(mark.t);
+    marks.push(`<line x1="${x.toFixed(2)}" y1="${padT}" x2="${x.toFixed(2)}" y2="${padT + plotH}" class="tau-mark"/>`);
+    marks.push(`<text class="tau-label" x="${(x + 4).toFixed(2)}" y="${padT + 34}">${mark.label}</text>`);
+  }
+
+  const dots: string[] = [];
+  const addDot = (sample: SquarePoint, key: "vin" | "vout" | "vc" | "current", cls: string, yFn: (v: number) => number) => {
+    const x = xOf(sample.t);
+    const y = yFn(sample[key]);
+    if (sample.t < model.tStart || sample.t > model.tEnd) return;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    dots.push(`<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="4" class="cursor-dot ${cls}"/>`);
+  };
+  let cursor = "";
+  if (model.cursor && model.cursor.t >= model.tStart && model.cursor.t <= model.tEnd) {
+    const x = xOf(model.cursor.t);
+    cursor = `<line x1="${x.toFixed(2)}" y1="${padT}" x2="${x.toFixed(2)}" y2="${padT + plotH}" class="cursor"/>`;
+    addDot(model.cursor, "vin", "in", yOf);
+    addDot(model.cursor, "vout", "out", yOf);
+    if (model.showVc) addDot(model.cursor, "vc", "vc", yOf);
+    if (model.showI) addDot(model.cursor, "current", "i", yOfCurrent);
+    if (model.cursorBefore) {
+      addDot(model.cursorBefore, "vin", "in", yOf);
+      addDot(model.cursorBefore, "vout", "out", yOf);
+      if (model.showI) addDot(model.cursorBefore, "current", "i", yOfCurrent);
+    }
+  }
+
+  const traces = [
+    model.showVc ? `<polyline points="${polyline(model.samples, xOf, yOf, "vc")}" class="trace vc"/>` : "",
+    `<polyline points="${polyline(model.samples, xOf, yOf, "vin")}" class="trace in"/>`,
+    `<polyline points="${polyline(model.samples, xOf, yOf, "vout")}" class="trace out"/>`,
+    model.showI ? `<polyline points="${polyline(model.samples, xOf, yOfCurrent, "current")}" class="trace i"/>` : "",
+  ].join("");
+
+  return `
+    <svg class="scope" viewBox="0 0 ${W} ${H}" data-vb="${W}" data-pad-l="${padL}" data-plot-w="${plotW}" data-t0="${model.tStart}" data-t1="${model.tEnd}" role="img" aria-label="Input and output of the high-pass filter for a square wave. Blue is the input and orange is the output. Both use the voltage axis.">
+      <rect class="scope-bg" x="0" y="0" width="${W}" height="${H}" rx="12"/>
+      ${grid.join("")}
+      <defs>
+        <clipPath id="hp-scope-clip">
+          <rect x="${padL}" y="${padT}" width="${plotW}" height="${plotH}"/>
+        </clipPath>
+      </defs>
+      <g clip-path="url(#hp-scope-clip)">
+        ${marks.join("")}
+        ${traces}
+        ${cursor}
+        ${dots.join("")}
+      </g>
+      ${labels.join("")}
+      <text class="axis-name" x="${padL + plotW / 2}" y="${H - 4}" text-anchor="middle">time (${timeUnit})</text>
+      <text class="axis-name" x="16" y="${padT + plotH / 2}" text-anchor="middle" transform="rotate(-90 16 ${padT + plotH / 2})">voltage (V)</text>
+    </svg>
+  `;
 }

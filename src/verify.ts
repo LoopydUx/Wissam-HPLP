@@ -1,3 +1,15 @@
+import { formatFactor, formatHz, formatLessonVolts, formatSeconds } from "./format.ts";
+import { renderSection } from "./pulseLesson.ts";
+import {
+  ORIGINAL_EXAMPLES,
+  answerVolts,
+  capacitorVoltage,
+  plotWindow,
+  pulseTrace,
+  sampleAt,
+  solvePulse,
+  solutionSteps,
+} from "./pulseExamples.ts";
 import {
   cutoffFrequency,
   frequencyResponse,
@@ -6,6 +18,18 @@ import {
   stepCapacitor,
   timeConstant,
 } from "./sim.ts";
+import {
+  lessonHtml,
+  periodicCorners,
+  squareFacts,
+  squareLimits,
+  squarePoint,
+  squareSamples,
+  stageHtml,
+  startupCorners,
+  WORKED_EXAMPLE,
+  type SquareParams,
+} from "./square.ts";
 
 const R = 10_000;
 const C = 100e-9;
@@ -173,3 +197,241 @@ const expectedU = amp * lpFc.gain * Math.sin(2 * Math.PI * fc * end.t + lpFc.pha
 near(end.u, expectedU, 0.02, "numerical sine stays on the analytic solution");
 
 console.log("All filter checks passed.");
+
+const worked = squareFacts(WORKED_EXAMPLE);
+const corners = periodicCorners(worked);
+near(worked.tau, 1e-3, 1e-12, "worked tau");
+near(worked.fc, 1 / (2 * Math.PI * 1e-3), 1e-6, "worked fc");
+near(worked.half, 5e-3, 1e-12, "worked half period");
+near(worked.k, Math.exp(-5), 1e-12, "worked k");
+near(worked.B, 10 / (1 + Math.exp(-5)), 1e-12, "worked B");
+near(corners.afterRise, worked.B, 1e-15, "after rise");
+near(corners.beforeFall, worked.B * worked.k, 1e-15, "before fall");
+near(corners.afterFall, -worked.B, 1e-15, "after fall");
+near(corners.beforeRise, -worked.B * worked.k, 1e-15, "before rise");
+near(corners.beforeFall - worked.jump, corners.afterFall, 1e-12, "+Bk - 2A = -B");
+near(corners.beforeRise + worked.jump, corners.afterRise, 1e-12, "-Bk + 2A = +B");
+check(formatSeconds(worked.tau) === "1 ms", `tau text ${formatSeconds(worked.tau)}`);
+check(formatHz(worked.fc) === "159.15 Hz", `fc text ${formatHz(worked.fc)}`);
+check(formatSeconds(worked.half) === "5 ms", `half text ${formatSeconds(worked.half)}`);
+check(formatFactor(worked.k) === "0.006738", `k text ${formatFactor(worked.k)}`);
+check(formatLessonVolts(worked.B) === "9.933 V", `B text ${formatLessonVolts(worked.B)}`);
+check(formatLessonVolts(corners.beforeFall) === "0.06693 V", `Bk text ${formatLessonVolts(corners.beforeFall)}`);
+check(formatLessonVolts(corners.afterFall, true) === "−9.933 V", `−B text ${formatLessonVolts(corners.afterFall, true)}`);
+check(formatLessonVolts(corners.beforeRise, true) === "−0.06693 V", `−Bk text ${formatLessonVolts(corners.beforeRise, true)}`);
+check(worked.B > worked.amplitude, "periodic peak exceeds the input amplitude");
+
+const sineAtWorked = frequencyResponse("hp", WORKED_EXAMPLE.frequency, worked.tau);
+check(Math.abs(worked.B - WORKED_EXAMPLE.amplitude * sineAtWorked.gain) > 1, "square peak is not the sine-wave gain times A");
+
+function assertPlateau(samples: { t: number; vin: number; vout: number; vc: number; current: number }[], jump: number, resistance: number, label: string) {
+  check(samples.length > 10, `${label} has samples`);
+  let jumps = 0;
+  for (const sample of samples) {
+    near(sample.vc, sample.vin - sample.vout, 1e-9, `${label} VC = Vin - Vout`);
+    near(sample.current, sample.vout / resistance, 1e-12, `${label} I = Vout/R`);
+  }
+  for (let i = 1; i < samples.length; i++) {
+    const prev = samples[i - 1];
+    const next = samples[i];
+    if (Math.abs(prev.t - next.t) <= 1e-12) {
+      jumps += 1;
+      near(prev.vc, next.vc, 1e-8, `${label} capacitor stays continuous`);
+      near(next.vout - prev.vout, next.vin - prev.vin, 1e-8, `${label} output jump matches input jump`);
+      near(Math.abs(next.vin - prev.vin), jump, 1e-8, `${label} jump is 2A`);
+    } else {
+      near(prev.vin, next.vin, 1e-8, `${label} input holds between samples`);
+    }
+  }
+  check(jumps >= 2, `${label} draws instant edges, found ${jumps}`);
+}
+
+const workedSamples = squareSamples(WORKED_EXAMPLE, "periodic", 0, 3 / WORKED_EXAMPLE.frequency);
+assertPlateau(workedSamples, 10, WORKED_EXAMPLE.resistance, "worked periodic");
+let workedPeak = -Infinity;
+for (const sample of workedSamples) workedPeak = Math.max(workedPeak, sample.vout);
+near(workedPeak, worked.B, 1e-8, "graph peak is +B, not clamped to A");
+
+const startupSamples = squareSamples(WORKED_EXAMPLE, "startup", 0, 1 / WORKED_EXAMPLE.frequency);
+assertPlateau(startupSamples, 10, WORKED_EXAMPLE.resistance, "worked startup");
+near(startupSamples[0].t, 0, 1e-12, "startup begins at 0");
+near(startupSamples[0].vout, WORKED_EXAMPLE.amplitude, 1e-9, "startup Vout(0+) = VH");
+near(startupSamples[0].vc, 0, 1e-9, "startup VC(0) = 0");
+const firstFall = squareLimits(WORKED_EXAMPLE, "startup", worked.half, 1e-8);
+check(firstFall.jumped && firstFall.edge === "fall", "startup has a falling edge");
+near(firstFall.before.vout, WORKED_EXAMPLE.offset + WORKED_EXAMPLE.amplitude * Math.exp(-5) * 0 + 5 * Math.exp(-5), 1e-9, "startup before first fall");
+near(firstFall.after.vout - firstFall.before.vout, -10, 1e-9, "startup falling jump");
+near(firstFall.after.vc, firstFall.before.vc, 1e-9, "startup VC continuous at first fall");
+
+const startupAtZero = startupCorners(worked);
+near(startupAtZero.atStart, 5, 1e-12, "startup corner VH");
+near(startupAtZero.beforeFirstFall, 5 * Math.exp(-5), 1e-12, "startup VH k");
+near(startupAtZero.afterFirstFall, 5 * Math.exp(-5) - 10, 1e-12, "startup after fall");
+
+const shifted: SquareParams = { ...WORKED_EXAMPLE, offset: 3 };
+for (let i = 0; i <= 24; i++) {
+  const t = (i / 24) * worked.period;
+  const plain = squarePoint(WORKED_EXAMPLE, "periodic", t);
+  const moved = squarePoint(shifted, "periodic", t);
+  near(moved.vout, plain.vout, 1e-9, "DC offset leaves periodic output unchanged");
+  near(moved.vin - plain.vin, 3, 1e-9, "DC offset shifts the input");
+  near(moved.vc - plain.vc, 3, 1e-9, "DC offset shifts the capacitor voltage");
+}
+const startupShift = squarePoint(shifted, "startup", 0);
+near(startupShift.vout, 8, 1e-12, "startup output begins at the shifted VH");
+near(startupShift.vc, 0, 1e-12, "shifted startup is still uncharged");
+const startupLater = squarePoint(shifted, "startup", 4 * worked.period + 0.001);
+const periodicLater = squarePoint(shifted, "periodic", 4 * worked.period + 0.001);
+near(startupLater.vout, periodicLater.vout, 1e-6, "startup settles onto the periodic output");
+
+const riseEdge = squareLimits(WORKED_EXAMPLE, "periodic", 0, 1e-9);
+near(riseEdge.after.vout, worked.B, 1e-9, "periodic just after rising");
+near(riseEdge.before.vout, -worked.B * worked.k, 1e-9, "periodic just before rising");
+near(riseEdge.after.vc, riseEdge.before.vc, 1e-9, "periodic VC continuous at rising edge");
+
+let cap = 0;
+let clock = 0;
+const steps = 400;
+for (let edge = 0; edge < 4; edge++) {
+  const vin = edge % 2 === 0 ? worked.high : worked.low;
+  for (let i = 0; i < steps; i++) {
+    const sample = squarePoint(WORKED_EXAMPLE, "startup", clock);
+    near(sample.vc, cap, 1e-7, `integrator VC at t=${clock}`);
+    near(sample.vin, vin, 1e-9, `integrator Vin at t=${clock}`);
+    const tNext = edge * worked.half + (worked.half * (i + 1)) / steps;
+    cap = stepCapacitor(cap, vin, tNext - clock, worked.tau);
+    clock = tNext;
+  }
+}
+
+const fastF = 10 * worked.fc;
+const fastFacts = squareFacts({ ...WORKED_EXAMPLE, frequency: fastF });
+const fastSine = frequencyResponse("hp", fastF, fastFacts.tau);
+check(Math.abs(fastFacts.B - WORKED_EXAMPLE.amplitude * fastSine.gain) > 0.2, "fast square peak is not the sine gain");
+check(fastFacts.halfOverTau < 1, "10 fc is only a fraction of a time constant");
+
+const lesson = lessonHtml(WORKED_EXAMPLE, "periodic");
+for (const phrase of ["9.933", "0.06693", "0.006738", "159.15", "0.707", "does not describe the complete square-wave output"]) {
+  check(lesson.includes(phrase), `lesson missing ${phrase}`);
+}
+const stage = stageHtml(WORKED_EXAMPLE, "periodic", "rise", 0);
+check(stage.includes("10 V"), "stage names the 10 V step");
+check(stage.includes("continuous"), "stage explains capacitor continuity");
+const high = stageHtml(WORKED_EXAMPLE, "periodic", "high", 0);
+check(high.includes("0.368"), "high plateau explains one time constant");
+const startupStage = stageHtml(WORKED_EXAMPLE, "startup", "rise", 0);
+check(startupStage.includes("V<sub>H</sub>") || startupStage.includes("5"), "startup stage starts at VH");
+
+console.log(
+  "Worked example: τ =",
+  formatSeconds(worked.tau),
+  "fc =",
+  formatHz(worked.fc),
+  "k =",
+  formatFactor(worked.k),
+  "B =",
+  formatLessonVolts(worked.B),
+  "corners",
+  formatLessonVolts(corners.afterRise, true),
+  formatLessonVolts(corners.beforeFall, true),
+  formatLessonVolts(corners.afterFall, true),
+  formatLessonVolts(corners.beforeRise, true),
+);
+console.log("Square-wave checks passed.");
+
+const expectedAnswers: Record<number, { tau: string; values: Record<string, string>; max?: string }> = {
+  1: { tau: "1 ms", values: { "0.003": "−4.846 V", "0.004": "0.746 V" } },
+  2: { tau: "1 ms", values: { "0.004": "4.917 V", "0.008": "−1.873 V" } },
+  3: { tau: "1 ms", values: { "0.002": "2.528 V", "0.003": "0.930 V" } },
+  4: { tau: "10 ms", values: { "0.01": "4.509 V" }, max: "5.507 V" },
+};
+
+for (const example of ORIGINAL_EXAMPLES) {
+  const solved = solvePulse(example);
+  check(solved.valid, `example ${example.id} solves`);
+  const expect = expectedAnswers[example.id];
+  check(formatMsMatch(solved.tau, expect.tau), `example ${example.id} tau text ${solved.tau}`);
+  for (const query of solved.queries) {
+    const key = String(Number(query.t.toFixed(6)));
+    const wanted = expect.values[key];
+    check(wanted !== undefined, `example ${example.id} unexpected query ${query.t}`);
+    check(answerVolts(query.after.lp) === wanted, `example ${example.id} Vo(${query.t}) ${answerVolts(query.after.lp)} vs ${wanted}`);
+    near(query.before.vc, query.after.vc, 1e-12, `example ${example.id} VC continuous at ${query.t}`);
+    near(query.after.lp + query.after.hp, query.after.vin, 1e-12, `example ${example.id} lp+hp`);
+    if (query.atSwitch) {
+      near(query.after.hp - query.before.hp, query.after.vin - query.before.vin, 1e-12, `example ${example.id} hp jump`);
+      near(query.before.lp, query.after.lp, 1e-12, `example ${example.id} lp continuous`);
+    }
+  }
+  for (const edge of [example.ta, example.tb]) {
+    const sample = sampleAt(solved, edge);
+    check(sample.atSwitch, `example ${example.id} edge ${edge}`);
+    near(sample.before.vc, sample.after.vc, 1e-15, `example ${example.id} VC continuous at edge`);
+    near(sample.after.hp - sample.before.hp, sample.after.vin - sample.before.vin, 1e-12, `example ${example.id} resistor jump`);
+    near(sample.before.lp, sample.after.lp, 1e-15, `example ${example.id} low-pass continuous`);
+  }
+  const window = plotWindow(solved);
+  const trace = pulseTrace(solved, window.tStart, window.tEnd);
+  let edges = 0;
+  for (let i = 1; i < trace.length; i++) {
+    const prev = trace[i - 1];
+    const next = trace[i];
+    near(prev.lp + prev.hp, prev.vin, 1e-9, `trace identity ${example.id}`);
+    if (Math.abs(prev.t - next.t) <= 1e-12) {
+      edges += 1;
+      near(prev.vc, next.vc, 1e-12, `trace VC continuous ${example.id}`);
+      near(next.hp - prev.hp, next.vin - prev.vin, 1e-12, `trace hp jump ${example.id}`);
+    }
+  }
+  check(edges >= 2, `example ${example.id} draws both vertical edges, found ${edges}`);
+  const answers = renderSection(solved, "lp", "answers", "H", true);
+  for (const value of Object.values(expect.values)) check(answers.includes(value), `example ${example.id} answer box missing ${value}`);
+  if (expect.max) check(answers.includes(expect.max), `example ${example.id} max missing ${expect.max}`);
+  const steps = solutionSteps(solved);
+  check(example.ta > 0 ? steps.includes("before") : !steps.includes("before"), `example ${example.id} before-step`);
+}
+
+const ex1 = solvePulse(ORIGINAL_EXAMPLES[0]);
+near(ex1.tau, 0.001, 1e-15, "example 1 tau");
+near(sampleAt(ex1, 0.001).after.lp, 4 * (1 - Math.exp(-1)), 1e-12, "example 1 Vo(1 ms)");
+check(answerVolts(sampleAt(ex1, 0.001).after.lp) === "2.528 V", "example 1 displays 2.528 V");
+const before = renderSection(ex1, "lp", "before", "D", false);
+check(before.includes("2.528 V"), "example 1 solution shows Vo(1 ms)");
+const given = renderSection(ex1, "lp", "given", "A", false);
+check(given.includes("has not yet settled"), "example 1 explains the uncharged start");
+
+const ex1hp = sampleAt(ex1, 0.003);
+check(answerVolts(ex1hp.before.hp) === "−1.154 V", `hp before 3 ms ${answerVolts(ex1hp.before.hp)}`);
+check(answerVolts(ex1hp.after.hp) === "8.846 V", `hp after 3 ms ${answerVolts(ex1hp.after.hp)}`);
+const hpQuery = renderSection(ex1, "hp", "queries", "G", false);
+check(hpQuery.includes("−1.154 V") && hpQuery.includes("8.846 V"), "high-pass solution labels both sides at 3 ms");
+check(hpQuery.includes("before") && hpQuery.includes("after"), "high-pass solution names the sides");
+
+const ex4 = solvePulse(ORIGINAL_EXAMPLES[3]);
+near(ex4.tau, 0.01, 1e-15, "example 4 tau");
+near(ex4.maxCapacitor, 10 * (1 - Math.exp(-0.8)), 1e-12, "example 4 max");
+near(ex4.maxCapacitorTime, 0.008, 1e-15, "example 4 max time");
+check(answerVolts(ex4.maxCapacitor) === "5.507 V", "example 4 max text");
+const ex4answers = renderSection(ex4, "lp", "answers", "H", true);
+check(ex4answers.includes("5τ"), "example 4 explains the short pulse");
+check(ex4answers.includes("10") && ex4answers.includes("never reaches"), "example 4 explains why the target is missed");
+const ex4edge = sampleAt(ex4, 0);
+near(ex4edge.before.hp, 0, 1e-15, "example 4 hp before t=0");
+near(ex4edge.after.hp, 10, 1e-15, "example 4 hp jumps to 10 V");
+near(ex4edge.before.vc, ex4edge.after.vc, 1e-15, "example 4 VC continuous at t=0");
+
+const custom = solvePulse({ ...ORIGINAL_EXAMPLES[0], resistance: 20_000 });
+near(custom.tau, 0.002, 1e-15, "edited resistance changes tau");
+near(
+  sampleAt(custom, 0.001).after.vc,
+  capacitorVoltage(0, 4, 0.001, 0.002),
+  1e-12,
+  "edited example uses the exponential state equation",
+);
+
+function formatMsMatch(seconds: number, text: string): boolean {
+  const ms = Math.round(seconds * 1e9) / 1e6;
+  return text === `${ms} ms`;
+}
+
+console.log("Pulse example checks passed.");
