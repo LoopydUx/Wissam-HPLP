@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Low-pass and high-pass RC filters</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <p class="eyebrow">High-school electronics</p>
+        <h1>Low-pass and high-pass RC filters</h1>
+        <p class="lede">
+          Each filter is one resistor and one capacitor. Both see the same input.
+          The low-pass output is the capacitor voltage. The high-pass output is the resistor voltage.
+        </p>
+      </header>
+
+      <section class="metrics" aria-label="Live filter numbers">
+        <div class="metric">
+          <span>Time constant τ = RC</span>
+          <strong id="m-tau">—</strong>
+        </div>
+        <div class="metric">
+          <span>Cutoff fc = 1 / (2πRC)</span>
+          <strong id="m-fc">—</strong>
+        </div>
+        <div class="metric">
+          <span>f / fc, also called ωRC</span>
+          <strong id="m-ratio">—</strong>
+        </div>
+      </section>
+
+      <section class="panel" aria-label="Shared input controls">
+        <div class="control">
+          <label for="r-number">Resistance R</label>
+          <input id="r-slider" type="range" min="0" max="1000" step="0.001" aria-valuemin="10" aria-valuemax="1000000" />
+          <div class="numline">
+            <input id="r-number" type="number" inputmode="decimal" min="0.01" step="any" />
+            <select id="r-unit" aria-label="Resistance unit">
+              <option value="ohm">Ω</option>
+              <option value="kohm" selected>kΩ</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="control">
+          <label for="c-number">Capacitance C</label>
+          <input id="c-slider" type="range" min="0" max="1000" step="0.001" />
+          <div class="numline">
+            <input id="c-number" type="number" inputmode="decimal" min="0" step="any" />
+            <select id="c-unit" aria-label="Capacitance unit">
+              <option value="nF" selected>nF</option>
+              <option value="uF">µF</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="control" id="freq-control">
+          <label for="f-number">Input frequency</label>
+          <input id="f-slider" type="range" min="0" max="1000" step="0.001" />
+          <div class="numline">
+            <input id="f-number" type="number" inputmode="decimal" min="0" step="any" />
+            <select id="f-unit" aria-label="Frequency unit">
+              <option value="Hz" selected>Hz</option>
+              <option value="kHz">kHz</option>
+            </select>
+          </div>
+          <p class="hint" id="freq-hint"></p>
+        </div>
+
+        <div class="control">
+          <label for="a-number">Input amplitude <span class="unit-hint">peak voltage</span></label>
+          <input id="a-slider" type="range" min="0" max="20" step="0.1" />
+          <div class="numline">
+            <input id="a-number" type="number" inputmode="decimal" min="0" max="20" step="0.1" />
+            <span class="suffix">V peak</span>
+          </div>
+        </div>
+
+        <div class="control">
+          <label for="o-number">DC offset</label>
+          <input id="o-slider" type="range" min="-20" max="20" step="0.1" />
+          <div class="numline">
+            <input id="o-number" type="number" inputmode="decimal" min="-20" max="20" step="0.1" />
+            <span class="suffix">V</span>
+          </div>
+        </div>
+
+        <div class="control waveform-control">
+          <span id="wave-label">Waveform</span>
+          <div class="segment" role="radiogroup" aria-labelledby="wave-label">
+            <label><input type="radio" name="wave" value="sine" checked /> Sine</label>
+            <label><input type="radio" name="wave" value="square" /> Square</label>
+            <label><input type="radio" name="wave" value="step" /> DC step</label>
+          </div>
+        </div>
+
+        <div class="transport">
+          <button type="button" id="play" aria-pressed="false">Play</button>
+          <button type="button" id="reset">Reset time</button>
+          <div class="presets" role="group" aria-label="Frequency presets">
+            <button type="button" id="pre-low" data-factor="0.1">Below cutoff · 0.1 fc</button>
+            <button type="button" id="pre-mid" data-factor="1">At cutoff · fc</button>
+            <button type="button" id="pre-high" data-factor="10">Above cutoff · 10 fc</button>
+          </div>
+        </div>
+      </section>
+
+      <p class="scale-note">Both graphs use the same time scale and the same voltage scale, so you can compare real amplitudes and phase.</p>
+
+      <div class="pair">
+        <article class="card lp">
+          <header class="card-head">
+            <h2>Low-pass</h2>
+            <p>Input → series resistor → output. Capacitor from the output to ground.</p>
+          </header>
+          <div id="circuit-lp"></div>
+          <p class="measure">Output measured across the capacitor. Ideal source, no load.</p>
+          <div class="legend" aria-hidden="true"><span class="swatch in"></span> Input <span class="swatch out"></span> Output</div>
+          <div id="scope-lp"></div>
+          <dl class="stats" id="stats-lp"></dl>
+        </article>
+
+        <article class="card hp">
+          <header class="card-head">
+            <h2>High-pass</h2>
+            <p>Input → series capacitor → output. Resistor from the output to ground.</p>
+          </header>
+          <div id="circuit-hp"></div>
+          <p class="measure">Output measured across the resistor. Ideal source, no load.</p>
+          <div class="legend" aria-hidden="true"><span class="swatch in"></span> Input <span class="swatch out"></span> Output</div>
+          <div id="scope-hp"></div>
+          <dl class="stats" id="stats-hp"></dl>
+        </article>
+      </div>
+
+      <p class="cursor-read" id="cursor-read" hidden></p>
+
+      <section class="card bode-card">
+        <header class="card-head">
+          <h2>Gain versus frequency</h2>
+          <p>For a sine wave, gain is output peak divided by input peak. The dashed line is the cutoff. The blue line is the frequency you selected.</p>
+        </header>
+        <div id="bode"></div>
+        <ul class="legend bode-legend">
+          <li><span class="swatch lp"></span> Low-pass</li>
+          <li><span class="swatch hp"></span> High-pass</li>
+          <li><span class="swatch fc"></span> Cutoff fc</li>
+          <li><span class="swatch f"></span> Selected frequency</li>
+        </ul>
+        <p id="bode-note" class="measure"></p>
+      </section>
+
+      <section class="card lesson" id="lesson" aria-live="polite">
+        <h2>What is happening</h2>
+        <div id="lesson-body"></div>
+        <p class="formulas">
+          Low-pass: H(jω) = 1 / (1 + jωRC).
+          High-pass: H(jω) = jωRC / (1 + jωRC).
+          With the same capacitor voltage at the start, low-pass output + high-pass output = input.
+        </p>
+      </section>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
