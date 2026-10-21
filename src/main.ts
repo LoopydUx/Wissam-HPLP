@@ -31,8 +31,6 @@ const state = {
   amplitude: 5,
   offset: 0,
   wave: "sine" as Waveform,
-  playing: false,
-  origin: 0,
   cursorFrac: 0,
   rUnit: "kohm" as RUnit,
   cUnit: "nF" as CUnit,
@@ -60,8 +58,6 @@ const aSlider = $<HTMLInputElement>("a-slider");
 const aNumber = $<HTMLInputElement>("a-number");
 const oSlider = $<HTMLInputElement>("o-slider");
 const oNumber = $<HTMLInputElement>("o-number");
-const playBtn = $<HTMLButtonElement>("play");
-const resetBtn = $<HTMLButtonElement>("reset");
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
@@ -120,7 +116,6 @@ function viewModel() {
   const tau = timeConstant(state.R, state.C);
   const fc = cutoffFrequency(state.R, state.C);
   const span = displaySpan(state.wave, state.freq, tau);
-  const origin = state.wave === "step" ? 0 : state.origin;
   const trace = generateTrace({
     resistance: state.R,
     capacitance: state.C,
@@ -128,7 +123,6 @@ function viewModel() {
     amplitude: state.amplitude,
     offset: state.offset,
     wave: state.wave,
-    origin,
   });
   const extent = sampleExtents(trace.samples);
   const y = niceY(extent.min, extent.max);
@@ -204,15 +198,8 @@ function paint() {
     ? "The DC step follows τ. Frequency is kept for when you switch back to sine or square."
     : "Logarithmic slider. Presets use the cutoff of the R and C above.";
 
-  for (const id of ["pre-low", "pre-mid", "pre-high"]) {
-    const btn = $<HTMLButtonElement>(id);
-    const factor = Number(btn.dataset.factor);
-    const active = Math.abs(state.freq - factor * fc) / fc < 0.01;
-    btn.setAttribute("aria-pressed", active ? "true" : "false");
-  }
-
-  playBtn.textContent = state.playing ? "Pause" : "Play";
-  playBtn.setAttribute("aria-pressed", state.playing ? "true" : "false");
+  const cutoffBtn = $<HTMLButtonElement>("pre-mid");
+  cutoffBtn.setAttribute("aria-pressed", Math.abs(state.freq - fc) / fc < 0.01 ? "true" : "false");
 }
 
 function paintCursor(samples: { t: number; vin: number; lp: number; hp: number }[], cursor: number | null) {
@@ -290,36 +277,6 @@ function bodeNote(lpGain: number, hpGain: number): string {
     return `A square wave is built from many sine waves. Its slowest piece, the fundamental, is at the blue marker: low-pass gain ${formatGain(lpGain)}, high-pass gain ${formatGain(hpGain)}.`;
   }
   return `At the selected frequency, low-pass gain is ${formatGain(lpGain)} and high-pass gain is ${formatGain(hpGain)}. Output peak = input peak × gain.`;
-}
-
-let raf = 0;
-let last = 0;
-
-function frame(now: number) {
-  if (!state.playing) return;
-  const dt = Math.min(0.05, (now - last) / 1000 || 0);
-  last = now;
-  if (state.wave === "step") {
-    state.cursorFrac = (state.cursorFrac + dt / 6) % 1;
-  } else {
-    const period = 1 / state.freq;
-    state.origin = (state.origin + dt * period * 0.45) % period;
-  }
-  paintScopes();
-  raf = requestAnimationFrame(frame);
-}
-
-function setPlaying(playing: boolean) {
-  state.playing = playing;
-  playBtn.textContent = playing ? "Pause" : "Play";
-  playBtn.setAttribute("aria-pressed", playing ? "true" : "false");
-  if (raf) cancelAnimationFrame(raf);
-  if (playing) {
-    last = performance.now();
-    raf = requestAnimationFrame(frame);
-  } else {
-    paint();
-  }
 }
 
 rSlider.addEventListener("input", () => {
@@ -404,36 +361,16 @@ document.querySelectorAll<HTMLInputElement>('input[name="wave"]').forEach((input
     if (!input.checked) return;
     state.wave = input.value as Waveform;
     if (state.wave === "step") parkStepCursor();
-    state.origin = 0;
     paint();
   });
 });
 
-playBtn.addEventListener("click", () => setPlaying(!state.playing));
-resetBtn.addEventListener("click", () => {
-  state.origin = 0;
-  parkStepCursor();
-  setPlaying(false);
-});
-
-for (const id of ["pre-low", "pre-mid", "pre-high"]) {
-  $(id).addEventListener("click", () => {
-    const factor = Number($<HTMLButtonElement>(id).dataset.factor);
-    const fc = cutoffFrequency(state.R, state.C);
-    state.freq = clamp(factor * fc, F_MIN, F_MAX);
-    fSlider.value = String(sliderFromLog(state.freq, F_MIN, F_MAX));
-    writeNumber(fNumber, state.freq, fScale());
-    paint();
-  });
-}
-
-window.addEventListener("keydown", (event) => {
-  if (event.code !== "Space") return;
-  if (document.getElementById("view-compare")?.hidden) return;
-  const tag = (event.target as HTMLElement | null)?.tagName;
-  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
-  event.preventDefault();
-  setPlaying(!state.playing);
+$("pre-mid").addEventListener("click", () => {
+  const fc = cutoffFrequency(state.R, state.C);
+  state.freq = clamp(fc, F_MIN, F_MAX);
+  fSlider.value = String(sliderFromLog(state.freq, F_MIN, F_MAX));
+  writeNumber(fNumber, state.freq, fScale());
+  paint();
 });
 
 type SimulatorPage = "compare" | "square" | "examples";

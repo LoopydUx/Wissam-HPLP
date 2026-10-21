@@ -104,12 +104,8 @@
         </div>
 
         <div class="transport">
-          <button type="button" id="play" aria-pressed="false">Play</button>
-          <button type="button" id="reset">Reset time</button>
           <div class="presets" role="group" aria-label="Frequency presets">
-            <button type="button" id="pre-low" data-factor="0.1">Below cutoff · 0.1 fc</button>
-            <button type="button" id="pre-mid" data-factor="1">At cutoff · fc</button>
-            <button type="button" id="pre-high" data-factor="10">Above cutoff · 10 fc</button>
+            <button type="button" id="pre-mid">At cutoff · fc</button>
           </div>
         </div>
       </section>
@@ -285,13 +281,9 @@
         </div>
 
         <div class="transport">
-          <button type="button" id="sq-play" aria-pressed="false">Play</button>
-          <button type="button" id="sq-reset">Reset time</button>
           <div class="presets" role="group" aria-label="Presets">
             <button type="button" id="sq-worked">Worked example</button>
-            <button type="button" id="sq-pre-low" data-factor="0.1">Below cutoff · 0.1 fc</button>
-            <button type="button" id="sq-pre-mid" data-factor="1">At cutoff · fc</button>
-            <button type="button" id="sq-pre-high" data-factor="10">Above cutoff · 10 fc</button>
+            <button type="button" id="sq-pre-mid">At cutoff · fc</button>
           </div>
         </div>
       </section>
@@ -333,7 +325,7 @@
               <label><input id="sq-show-i" type="checkbox" /> <span class="swatch i"></span> Resistor current</label>
             </div>
             <div id="sq-scope" class="scope-host"></div>
-            <p class="measure">Drag the graph to move the cursor. Pause first if it is playing. VC = Vin − Vout and I = Vout / R.</p>
+            <p class="measure">Drag the graph to move the cursor. VC = Vin − Vout and I = Vout / R.</p>
             <p class="measure" id="sq-scale-note"></p>
             <p class="cursor-read" id="sq-readout"></p>
             <p class="measure" id="sq-stats-note"></p>
