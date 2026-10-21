@@ -38,7 +38,42 @@
         </div>
       </section>
 
-      <section class="panel" aria-label="Shared input controls">
+      <p class="scale-note">Both graphs use the same time scale and the same voltage scale, so you can compare real amplitudes and phase.</p>
+
+      <div class="segment compare-filter-toggle" role="radiogroup" aria-label="Choose graph to show">
+        <label><input type="radio" name="compare-filter" value="lp" checked /> Low-pass</label>
+        <label><input type="radio" name="compare-filter" value="hp" /> High-pass</label>
+      </div>
+
+      <div class="pair">
+        <article class="card lp">
+          <header class="card-head">
+            <h2>Low-pass</h2>
+            <p>Input → series resistor → output. Capacitor from the output to ground.</p>
+          </header>
+          <div id="circuit-lp"></div>
+          <p class="measure">Output measured across the capacitor. Ideal source, no load.</p>
+          <div class="legend" aria-hidden="true"><span class="swatch in"></span> Input <span class="swatch out"></span> Output</div>
+          <div id="scope-lp"></div>
+          <dl class="stats" id="stats-lp"></dl>
+        </article>
+
+        <article class="card hp">
+          <header class="card-head">
+            <h2>High-pass</h2>
+            <p>Input → series capacitor → output. Resistor from the output to ground.</p>
+          </header>
+          <div id="circuit-hp"></div>
+          <p class="measure">Output measured across the resistor. Ideal source, no load.</p>
+          <div class="legend" aria-hidden="true"><span class="swatch in"></span> Input <span class="swatch out"></span> Output</div>
+          <div id="scope-hp"></div>
+          <dl class="stats" id="stats-hp"></dl>
+        </article>
+      </div>
+
+      <p class="cursor-read" id="cursor-read" hidden></p>
+
+      <section class="panel compare-controls" aria-label="Shared input controls">
         <div class="control">
           <label for="r-number">Resistance R</label>
           <input id="r-slider" type="range" min="0" max="1000" step="0.001" aria-valuemin="10" aria-valuemax="1000000" />
@@ -113,36 +148,6 @@
           </div>
         </div>
       </section>
-
-      <p class="scale-note">Both graphs use the same time scale and the same voltage scale, so you can compare real amplitudes and phase.</p>
-
-      <div class="pair">
-        <article class="card lp">
-          <header class="card-head">
-            <h2>Low-pass</h2>
-            <p>Input → series resistor → output. Capacitor from the output to ground.</p>
-          </header>
-          <div id="circuit-lp"></div>
-          <p class="measure">Output measured across the capacitor. Ideal source, no load.</p>
-          <div class="legend" aria-hidden="true"><span class="swatch in"></span> Input <span class="swatch out"></span> Output</div>
-          <div id="scope-lp"></div>
-          <dl class="stats" id="stats-lp"></dl>
-        </article>
-
-        <article class="card hp">
-          <header class="card-head">
-            <h2>High-pass</h2>
-            <p>Input → series capacitor → output. Resistor from the output to ground.</p>
-          </header>
-          <div id="circuit-hp"></div>
-          <p class="measure">Output measured across the resistor. Ideal source, no load.</p>
-          <div class="legend" aria-hidden="true"><span class="swatch in"></span> Input <span class="swatch out"></span> Output</div>
-          <div id="scope-hp"></div>
-          <dl class="stats" id="stats-hp"></dl>
-        </article>
-      </div>
-
-      <p class="cursor-read" id="cursor-read" hidden></p>
 
       <section class="card bode-card">
         <header class="card-head">
