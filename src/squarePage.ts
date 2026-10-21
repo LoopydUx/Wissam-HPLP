@@ -41,12 +41,11 @@ type FUnit = "Hz" | "kHz";
 const state = {
   R: WORKED_EXAMPLE.resistance,
   C: WORKED_EXAMPLE.capacitance,
-  freq: WORKED_EXAMPLE.frequency,
+  freq: cutoffFrequency(WORKED_EXAMPLE.resistance, WORKED_EXAMPLE.capacitance),
   amplitude: WORKED_EXAMPLE.amplitude,
   offset: WORKED_EXAMPLE.offset,
   mode: "periodic" as SquareMode,
   stage: "rise" as CycleStage,
-  playing: false,
   cursor: 0,
   startPeriods: 0,
   periods: 3,
@@ -151,7 +150,6 @@ const oNumber = $<HTMLInputElement>("sq-o-number");
 const timeSlider = $<HTMLInputElement>("sq-time-zoom");
 const voltSlider = $<HTMLInputElement>("sq-volt-zoom");
 const startSlider = $<HTMLInputElement>("sq-start");
-const playBtn = $<HTMLButtonElement>("sq-play");
 const scopeHost = $("sq-scope");
 
 function syncControls() {
@@ -228,15 +226,8 @@ function paintChrome(facts = squareFacts(params())) {
   $("sq-start-label").textContent = `starts at ${formatCircuitTime(state.startPeriods / state.freq, 1 / state.freq)}`;
 
   const fc = facts.fc;
-  for (const id of ["sq-pre-low", "sq-pre-mid", "sq-pre-high"]) {
-    const btn = $<HTMLButtonElement>(id);
-    const factor = Number(btn.dataset.factor);
-    const active = Math.abs(state.freq - factor * fc) / fc < 0.02;
-    btn.setAttribute("aria-pressed", active ? "true" : "false");
-  }
+  $<HTMLButtonElement>("sq-pre-mid").setAttribute("aria-pressed", Math.abs(state.freq - fc) / fc < 0.02 ? "true" : "false");
   $<HTMLButtonElement>("sq-worked").setAttribute("aria-pressed", isWorkedExample(params()) && state.mode === "periodic" ? "true" : "false");
-  playBtn.textContent = state.playing ? "Pause" : "Play";
-  playBtn.setAttribute("aria-pressed", state.playing ? "true" : "false");
 }
 
 let stageKey = "";
@@ -374,45 +365,6 @@ function paintFull() {
   paintScope();
 }
 
-let raf = 0;
-let last = 0;
-
-function frame(now: number) {
-  if (!state.playing) return;
-  const dt = Math.min(0.05, (now - last) / 1000 || 0);
-  last = now;
-  const { t0, t1, period } = viewWindow();
-  state.cursor += (dt * period) / 3;
-  if (state.cursor > t1) {
-    if (state.mode === "periodic") {
-      const span = t1 - t0;
-      state.cursor = t0 + ((state.cursor - t0) % span);
-    } else {
-      state.startPeriods += state.periods * 0.5;
-      if (state.startPeriods > 40) {
-        state.startPeriods = 0;
-        state.cursor = 0;
-      }
-    }
-  }
-  clampCursor();
-  paintScope();
-  raf = requestAnimationFrame(frame);
-}
-
-function setPlaying(playing: boolean) {
-  state.playing = playing;
-  playBtn.textContent = playing ? "Pause" : "Play";
-  playBtn.setAttribute("aria-pressed", playing ? "true" : "false");
-  if (raf) cancelAnimationFrame(raf);
-  if (playing) {
-    last = performance.now();
-    raf = requestAnimationFrame(frame);
-  } else {
-    paintFull();
-  }
-}
-
 function parseField(input: HTMLInputElement, scale: number, min: number, max: number): number | null {
   const raw = Number(input.value);
   if (!Number.isFinite(raw)) return null;
@@ -440,8 +392,7 @@ function focusStage(stage: CycleStage) {
   reveal(t);
   state.cursor = t;
   clampCursor();
-  if (state.playing) setPlaying(false);
-  else paintFull();
+  paintFull();
 }
 
 function timeFromPointer(event: PointerEvent): number | null {
@@ -545,8 +496,7 @@ export function initSquarePage() {
       state.mode = input.value as SquareMode;
       state.cursor = 0;
       state.startPeriods = 0;
-      if (state.playing) setPlaying(false);
-      else paintFull();
+      paintFull();
     });
   });
 
@@ -581,13 +531,6 @@ export function initSquarePage() {
     paintFastKeepingLesson();
   });
 
-  playBtn.addEventListener("click", () => setPlaying(!state.playing));
-  $<HTMLButtonElement>("sq-reset").addEventListener("click", () => {
-    state.cursor = 0;
-    state.startPeriods = 0;
-    setPlaying(false);
-  });
-
   $<HTMLButtonElement>("sq-worked").addEventListener("click", () => {
     state.R = WORKED_EXAMPLE.resistance;
     state.C = WORKED_EXAMPLE.capacitance;
@@ -603,26 +546,21 @@ export function initSquarePage() {
     state.voltZoom = 1;
     state.cursor = 0;
     state.startPeriods = 0;
-    if (state.playing) setPlaying(false);
-    else paintFull();
+    paintFull();
   });
 
-  for (const id of ["sq-pre-low", "sq-pre-mid", "sq-pre-high"]) {
-    $(id).addEventListener("click", () => {
-      const factor = Number($<HTMLButtonElement>(id).dataset.factor);
-      state.freq = clamp(factor * cutoffFrequency(state.R, state.C), F_MIN, F_MAX);
-      clampCursor();
-      paintFull();
-    });
-  }
+  $("sq-pre-mid").addEventListener("click", () => {
+    state.freq = clamp(cutoffFrequency(state.R, state.C), F_MIN, F_MAX);
+    clampCursor();
+    paintFull();
+  });
 
   scopeHost.addEventListener("pointerdown", (event) => {
     const t = timeFromPointer(event);
     if (t === null) return;
     state.cursor = t;
     try { scopeHost.setPointerCapture(event.pointerId); } catch { /* pointer capture needs a real pointer */ }
-    if (state.playing) setPlaying(false);
-    else paintFastKeepingLesson();
+    paintFastKeepingLesson();
   });
   scopeHost.addEventListener("pointermove", (event) => {
     if (!scopeHost.hasPointerCapture(event.pointerId)) return;
@@ -630,15 +568,6 @@ export function initSquarePage() {
     if (t === null) return;
     state.cursor = t;
     paintFastKeepingLesson();
-  });
-
-  window.addEventListener("keydown", (event) => {
-    if (event.code !== "Space") return;
-    if ($("view-square").hidden) return;
-    const tag = (event.target as HTMLElement | null)?.tagName;
-    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
-    event.preventDefault();
-    setPlaying(!state.playing);
   });
 
   syncControls();
@@ -651,6 +580,5 @@ function paintFastKeepingLesson() {
 }
 
 export function refreshSquarePage() {
-  if (state.playing) paintScope();
-  else paintFull();
+  paintFull();
 }

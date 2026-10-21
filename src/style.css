@@ -289,7 +289,6 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 @media (max-width: 720px) {
   .page { width: min(100% - 16px, 1180px); padding-top: 16px; }
   .transport { align-items: stretch; }
-  #play, #reset, #sq-play, #sq-reset { flex: 1; }
 }
 
 .topnav {
